@@ -513,6 +513,10 @@ do
 
   -- ... and there is more!
   --  Check out: https://github.com/nvim-mini/mini.nvim
+
+  -- Renders markdown in the buffer (headings, tables, code blocks, LaTeX as Unicode); raw text in insert mode
+  vim.pack.add { gh 'MeanderingProgrammer/render-markdown.nvim' }
+  vim.keymap.set('n', '<leader>tm', '<cmd>RenderMarkdown toggle<CR>', { desc = '[T]oggle [M]arkdown rendering' })
 end
 
 -- ============================================================
@@ -992,7 +996,26 @@ do
   vim.pack.add { { src = gh 'nvim-treesitter/nvim-treesitter', version = 'main' } }
 
   -- Ensure basic parsers are installed
-  local parsers = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc', 'python', 'typescript', 'tsx', 'javascript', 'json' }
+  local parsers = {
+    'bash',
+    'c',
+    'diff',
+    'html',
+    'lua',
+    'luadoc',
+    'markdown',
+    'markdown_inline',
+    'latex',
+    'query',
+    'vim',
+    'vimdoc',
+    'python',
+    'typescript',
+    'tsx',
+    'javascript',
+    'json',
+    'yaml',
+  }
   require('nvim-treesitter').install(parsers)
 
   ---@param buf integer
