@@ -99,7 +99,7 @@ do
   vim.g.maplocalleader = ' '
 
   -- Set to true if you have a Nerd Font installed and selected in the terminal
-  vim.g.have_nerd_font = false
+  vim.g.have_nerd_font = true
 
   -- [[ Setting options ]]
   --  See `:help vim.o`
@@ -226,15 +226,16 @@ do
   -- vim.keymap.set('n', '<up>', '<cmd>echo "Use k to move!!"<CR>')
   -- vim.keymap.set('n', '<down>', '<cmd>echo "Use j to move!!"<CR>')
 
-  -- Keybinds to make split navigation easier.
-  --  Use CTRL+<hjkl> to switch between windows
-  --
-  --  See `:help wincmd` for a list of all window commands
-  vim.keymap.set('n', '<C-h>', '<C-w><C-h>', { desc = 'Move focus to the left window' })
-  vim.keymap.set('n', '<C-l>', '<C-w><C-l>', { desc = 'Move focus to the right window' })
-  vim.keymap.set('n', '<C-j>', '<C-w><C-j>', { desc = 'Move focus to the lower window' })
-  vim.keymap.set('n', '<C-k>', '<C-w><C-k>', { desc = 'Move focus to the upper window' })
+  -- Yank "path:start-end" of the selection, for pasting into an agent prompt
+  vim.keymap.set('x', '<leader>ya', function()
+    local s, e = vim.fn.line 'v', vim.fn.line '.'
+    if s > e then
+      s, e = e, s
+    end
+    vim.fn.setreg('+', ('%s:%d-%d'):format(vim.fn.expand '%:.', s, e))
+  end, { desc = '[Y]ank location for [A]gent' })
 
+  -- NOTE: CTRL+<hjkl> split navigation lives with vim-tmux-navigator in section 4.
   -- NOTE: Some terminals have colliding keymaps or are not able to send distinct keycodes
   -- vim.keymap.set("n", "<C-S-h>", "<C-w>H", { desc = "Move window to the left" })
   -- vim.keymap.set("n", "<C-S-l>", "<C-w>L", { desc = "Move window to the right" })
@@ -251,6 +252,15 @@ do
     desc = 'Highlight when yanking (copying) text',
     group = vim.api.nvim_create_augroup('kickstart-highlight-yank', { clear = true }),
     callback = function() vim.hl.on_yank() end,
+  })
+
+  -- 'autoread' alone only checks on focus change; this also catches edits made while you sit in a buffer
+  vim.api.nvim_create_autocmd({ 'FocusGained', 'BufEnter', 'CursorHold', 'TermLeave' }, {
+    desc = 'Reload buffers changed on disk (e.g. by a coding agent)',
+    group = vim.api.nvim_create_augroup('external-change-reload', { clear = true }),
+    callback = function()
+      if vim.fn.mode() ~= 'c' and vim.fn.getcmdwintype() == '' then vim.cmd.checktime() end
+    end,
   })
 end
 
@@ -393,6 +403,11 @@ do
       vim.keymap.set('n', '<leader>hb', function() gitsigns.blame_line { full = true } end, { desc = 'git [b]lame line', buf = bufnr })
       vim.keymap.set('n', '<leader>hd', gitsigns.diffthis, { desc = 'git [d]iff against index', buf = bufnr })
       vim.keymap.set('n', '<leader>hD', function() gitsigns.diffthis '~' end, { desc = 'git [D]iff against last commit', buf = bufnr })
+      vim.keymap.set('n', '<leader>hB', function()
+        vim.ui.input({ prompt = 'Hunk base ref (empty = index): ' }, function(ref)
+          if ref then gitsigns.change_base(ref ~= '' and ref or nil, true) end
+        end)
+      end, { desc = 'git change hunk [B]ase (e.g. main)', buf = bufnr })
       vim.keymap.set('n', '<leader>hQ', function() gitsigns.setqflist 'all' end, { desc = 'git hunk [Q]uickfix list (all files in repo)', buf = bufnr })
       vim.keymap.set('n', '<leader>hq', gitsigns.setqflist, { desc = 'git hunk [q]uickfix list (all changes in this file)', buf = bufnr })
       -- Toggles
@@ -402,6 +417,19 @@ do
       vim.keymap.set({ 'o', 'x' }, 'ih', gitsigns.select_hunk, { desc = 'text object [i]nside [h]unk', buf = bufnr })
     end,
   }
+
+  -- Side-by-side review of every change in the working tree; stays in sync while an agent edits
+  vim.pack.add { gh 'esmuellert/codediff.nvim' }
+  vim.keymap.set('n', '<leader>hv', '<cmd>CodeDiff<CR>', { desc = 'git re[v]iew all changes' })
+
+  -- CTRL+<hjkl> moves between splits and, at the edge, into the neighbouring tmux pane
+  vim.g.tmux_navigator_no_mappings = 1
+  vim.g.tmux_navigator_no_wrap = 1
+  vim.pack.add { gh 'christoomey/vim-tmux-navigator' }
+  vim.keymap.set('n', '<C-h>', '<cmd>TmuxNavigateLeft<CR>', { desc = 'Move focus to the left window/pane' })
+  vim.keymap.set('n', '<C-l>', '<cmd>TmuxNavigateRight<CR>', { desc = 'Move focus to the right window/pane' })
+  vim.keymap.set('n', '<C-j>', '<cmd>TmuxNavigateDown<CR>', { desc = 'Move focus to the lower window/pane' })
+  vim.keymap.set('n', '<C-k>', '<cmd>TmuxNavigateUp<CR>', { desc = 'Move focus to the upper window/pane' })
 
   -- Useful plugin to show you pending keybinds.
   vim.pack.add { gh 'folke/which-key.nvim' }
@@ -811,6 +839,12 @@ do
   })
 
   require('mason-tool-installer').setup { ensure_installed = ensure_installed }
+
+  -- Lets servers see files created/renamed outside nvim. Off by default on Linux, where it is
+  -- only cheap with the inotifywait backend (apt: inotify-tools).
+  if vim.fn.executable 'inotifywait' == 1 then
+    vim.lsp.config('*', { capabilities = { workspace = { didChangeWatchedFiles = { dynamicRegistration = true } } } })
+  end
 
   for name, server in pairs(servers) do
     vim.lsp.config(name, server)
